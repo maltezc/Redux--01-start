@@ -1,0 +1,164 @@
+https://redux.js.org/recipes/structuringreducers/immutableupdatepatterns
+
+
+Section 14, Lecture 252
+Immutable Update Patterns on reduxjs.org: http://redux.js.org/docs/recipes/reducers/ImmutableUpdatePatterns.html
+
+Updating Nested Objects
+The key to updating nested data is that every level of nesting must be copied and updated appropriately. This is often a difficult concept for those learning Redux, and there are some specific problems that frequently occur when trying to update nested objects. These lead to accidental direct mutation, and should be avoided.
+
+Common Mistake #1: New variables that point to the same objects
+Defining a new variable does not create a new actual object - it only creates another reference to the same object. An example of this error would be:
+
+function updateNestedState(state, action) {
+    let nestedState = state.nestedState;
+    // ERROR: this directly modifies the existing object reference - don't do this!
+    nestedState.nestedField = action.data;
+
+    return {
+        ...state,
+        nestedState
+    };
+}
+This function does correctly return a shallow copy of the top-level state object, but because the nestedState variable was still pointing at the existing object, the state was directly mutated.
+
+Common Mistake #2: Only making a shallow copy of one level
+Another common version of this error looks like this:
+
+function updateNestedState(state, action) {
+    // Problem: this only does a shallow copy!
+    let newState = {...state};
+
+    // ERROR: nestedState is still the same object!
+    newState.nestedState.nestedField = action.data;
+
+    return newState;
+}
+Doing a shallow copy of the top level is not sufficient - the nestedState object should be copied as well.
+
+Correct Approach: Copying All Levels of Nested Data
+Unfortunately, the process of correctly applying immutable updates to deeply nested state can easily become verbose and hard to read. Here's what an example of updating state.first.second[someId].fourth might look like:
+
+function updateVeryNestedField(state, action) {
+    return {
+        ...state,
+        first : {
+            ...state.first,
+            second : {
+                ...state.first.second,
+                [action.someId] : {
+                    ...state.first.second[action.someId],
+                    fourth : action.someValue
+                }
+            }
+        }
+    }
+}
+Obviously, each layer of nesting makes this harder to read, and gives more chances to make mistakes. This is one of several reasons why you are encouraged to keep your state flattened, and compose reducers as much as possible.
+
+Inserting and Removing Items in Arrays
+Normally, a Javascript array's contents are modified using mutative functions like push, unshift, and splice. Since we don't want to mutate state directly in reducers, those should normally be avoided. Because of that, you might see "insert" or "remove" behavior written like this:
+
+function insertItem(array, action) {
+    return [
+        ...array.slice(0, action.index),
+        action.item,
+        ...array.slice(action.index)
+    ]
+}
+
+function removeItem(array, action) {
+    return [
+        ...array.slice(0, action.index),
+        ...array.slice(action.index + 1)
+    ];
+}
+However, remember that the key is that the original in-memory reference is not modified. As long as we make a copy first, we can safely mutate the copy. Note that this is true for both arrays and objects, but nested values still must be updated using the same rules.
+
+This means that we could also write the insert and remove functions like this:
+
+function insertItem(array, action) {
+    let newArray = array.slice();
+    newArray.splice(action.index, 0, action.item);
+    return newArray;
+}
+
+function removeItem(array, action) {
+    let newArray = array.slice();
+    newArray.splice(action.index, 1);
+    return newArray;
+}
+The remove function could also be implemented as:
+
+function removeItem(array, action) {
+    return array.filter( (item, index) => index !== action.index);
+}
+Updating an Item in an Array
+Updating one item in an array can be accomplished by using Array.map, returning a new value for the item we want to update, and returning the existing values for all other items:
+
+function updateObjectInArray(array, action) {
+    return array.map( (item, index) => {
+        if(index !== action.index) {
+            // This isn't the item we care about - keep it as-is
+            return item;
+        }
+
+        // Otherwise, this is the one we want - return an updated value
+        return {
+            ...item,
+            ...action.item
+        };
+    });
+}
+Immutable Update Utility Libraries
+Because writing immutable update code can become tedious, there are a number of utility libraries that try to abstract out the process. These libraries vary in APIs and usage, but all try to provide a shorter and more succinct way of writing these updates. Some, like dot-prop-immutable, take string paths for commands:
+
+state = dotProp.set(state, `todos.${index}.complete`, true)
+Others, like immutability-helper (a fork of the now-deprecated React Immutability Helpers addon), use nested values and helper functions:
+
+var collection = [1, 2, {a: [12, 17, 15]}];
+var newCollection = update(collection, {2: {a: {$splice: [[1, 1, 13, 14]]}}});
+They can provide a useful alternative to writing manual immutable update logic.
+
+Immutable Data#Immutable Update Utilities section of the Redux Addons Catalog.
+
+
+
+Questions
+Search for a question:
+Search for a question
+11 questions in this lecture
+
+PR
+I didn't understand this piece of code
+Can anyone please explain me how does this code work.function insertItem(array, action) { return [ ...array.slice(0, action.index), action.item, ...array.slice(action.index) ] } function removeItem(array, action) { return [ ...array.slice(0, action.index), ...array.slice(action.index + 1) ]; }
+F
+About the intended usage of Redux
+Is Redux meant to replace the whole usage of per component/local state?For example, is it recommended to use Redux and local state in conjunction?The response from one of React's developers seems to point that it is possible, even recommended: https://github.com/reduxjs/redux/issues/1287But I'm just wondering of what that could look like. Maybe I'm getting my self ahead of the course, and this will be seen in another lecture. I'm just not sure what counts as being awkward (as the dev says :p) since, as of the moment, I'm learning. That answer is just a bit confusing and would love to get the input of the great knowledgeable people in here.Thanks in advance
+FK
+Immutable update
+If creating deep copy is so hard with the spread syntax, why don't we use the JSON.parse(JSON.stringify(a)) syntax?
+MS
+This is really hard
+can you pls explain how to update nested objects without going one level deeper with spread operators
+PO
+Top 3 Immutability Helpers?
+Hi Max - I was really liking Redux until I got to this lecture. Now it seems pretty scary. Do you have a "top 3" list of immutability helpers that you prefer? I'd guess it depends somewhat on the application. I'm currently attracted to dot-prop-immutable, because it seems pretty simple.I've also had some colleagues say that Redux is way too much maintenance over time. But I get why it's necessary. I don't see how one could manage app state w/o something like this, unless you managed it all in a DB alone. I'm guessing you're going to get to that shortly.In that vein, I'm wondering about using Redux w/Firebase, or maybe even a more structured DB like MySQL, and how to keep the entire DB out of local memory.Thanks for the awesome course! I'm a veteran deeply embedded guy (23 years C/C++) w/an add'l 4-5 years of enterprise side (php/html/java web/app servers on linux and a java service on Windows). I'm learning tons in this course. Started w/no JS experience whatsoever, and I'm catching on pretty quick. Becomes pretty obvious reading posts about JS when chasing down package stuff, that I still have a lot of ordinary JS to learn/understand, but I think I'm getting the hang of it. :D
+MG
+What do you mean by "and compose reducers as much as possible." ?
+Thanks :)
+MG
+Sure it's adding another package but...
+besides adding extra weight to the bundle - is there any other issue using something like https://github.com/jonschlinkert/clone-deep when cloning objects?
+JW
+Immutable Update Patterns
+Hi Max,Looks like the article has moved to https://redux.js.org/recipes/structuring-reducers/immutable-update-patterns
+ER
+Question about a spread operator.
+Hello, Max! In this paragraph, in the case when we want to update the value, the author for some reason spreader the new value: return { ...item, ...action.item }; Can't we just pass the new value without using a spread operator like that? return { ...item, action.item }; Thank you!
+How about immutable.js
+Hi, maxI saw immutable.js also can be used for immutable update, how does it compare to immutability-helperfang
+KK
+3levels deep state
+Hello, I am currently making web app for curtains shop to count total order price. Owner wants me to add rooms, in rooms he wants to add windows and in windows add curtains with all the details. I read this article and found that i was making a lot of shallow copies :( My state was like that: state{rooms:[name:'ss', windows:[name:'xx', curtains[{name, width, price.}]]]} I start doubting if i should do this. But rendering components is kinda easy this way. Maybe i should add id's on windows and curtains. Push them in three different arrays: rooms[] windows[] curtains[] Doing this i could add unique id's for same window room and curtains. When rendering have to filter all windows with the same if at room. This was its easy to change props for curtains as they are just one level deep.Now i am on this kind of structure, but is it ok to change state with redux on every keystroke i do in input to update my curtain settings?[image] Your course is so good that i am unhappy paying so little :( Thank you so much for the effort you put in these videos
+Question Details
