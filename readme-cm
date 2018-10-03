@@ -1,0 +1,9 @@
+redux.js.org --> official page for redux
+
+
+Middleware: http://redux.js.org/docs/advanced/Middleware.html
+
+redux-thunk package: https://github.com/gaearon/redux-thunk
+
+Async Actions: https://redux.js.org/advanced/asyncactions
+
